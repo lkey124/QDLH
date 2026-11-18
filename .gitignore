@@ -5,3 +5,8 @@ __pycache__/
 *.spec
 *.tmp
 data/user_pdfs/
+
+data/qdlh.sqlite
+data/seed_data.json
+data/pdf_pages/
+installer_out/
