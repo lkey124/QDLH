@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QĐLH Vault — Phần mềm Quản lý &amp; Tra cứu Quyết định Lưu hành Phân bón</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- THANH CÔNG CỤ TRÊN CÙNG (TÍCH HỢP TÌM KIẾM + BỘ LỌC + THÊM TỆP + CẬP NHẬT TÍNH NĂNG) -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="app-brand">
+        <span class="brand-badge">QĐLH</span>
+        <span class="brand-text">Tra cứu Lưu hành</span>
+        <span id="app-version-badge" class="ver-pill" title="Phiên bản tính năng hiện tại">v1.2.0</span>
+      </div>
+    </div>
+
+    <!-- Ô Tìm kiếm Trung tâm (Phím tắt Ctrl+F hoặc /) -->
+    <div class="header-search" id="search-box-wrap">
+      <span class="search-ico">🔎</span>
+      <input
+        type="text"
+        id="main-search"
+        placeholder="Gõ Mã số phân bón (VD: 09974, 28703, 31860...) hoặc tên SP, số QĐ, công ty... (Phím ↑↓ để chuyển mã)"
+        autocomplete="off"
+        autofocus
+      />
+      <button id="clear-search" class="clear-search-btn hidden" title="Xóa tìm kiếm">✕</button>
+      <div id="search-dropdown" class="search-dropdown hidden"></div>
+    </div>
+
+    <!-- Bộ lọc nhanh -->
+    <div class="header-filters">
+      <select id="filter-company" class="header-select" title="Lọc theo Đơn vị đăng ký">
+        <option value="">Tất cả Đơn vị</option>
+      </select>
+      <select id="filter-scope" class="header-select" title="Phạm vi hiển thị">
+        <option value="all">Tất cả mã PB</option>
+        <option value="folder">Mã có tệp PDF riêng</option>
+      </select>
+    </div>
+
+    <!-- Chuyển Tab Chế độ xem -->
+    <nav class="header-tabs">
+      <button class="tab-pill active" data-tab="lookup" title="Tra cứu chi tiết Mã số phân bón">
+        🔍 Tra cứu
+      </button>
+      <button class="tab-pill" data-tab="companies" title="Danh bạ Đơn vị &amp; Địa chỉ Sáp nhập">
+        🏢 Đơn vị (<span id="badge-companies">0</span>)
+      </button>
+      <button class="tab-pill" data-tab="decisions" title="Danh sách Văn bản Quyết định">
+        📜 QĐ (<span id="badge-decisions">0</span>)
+      </button>
+      <button class="tab-pill" data-tab="files" title="Quản lý tệp PDF trong máy">
+        📁 Tệp (<span id="badge-files">0</span>)
+      </button>
+    </nav>
+
+    <!-- Cụm nút chức năng: Thêm Tệp/Mã mới + Cập nhật tính năng + Phát hành + Xuất Excel -->
+    <div class="header-actions">
+      <button id="btn-add-new" class="btn-header add" title="Thêm tệp PDF mới hoặc Mã phân bón / Quyết định mới vào máy">
+        ➕ Thêm Tệp / Mã
+      </button>
+      <button id="btn-pull-update" class="btn-header update" title="Cập nhật tính năng mới từ GitHub (Giữ nguyên 100% tệp &amp; dữ liệu đã sửa trong máy)">
+        🔄 Cập nhật
+        <span id="update-dot" class="update-dot hidden"></span>
+      </button>
+      <button id="btn-publish-update" class="btn-header publish hidden" title="Phát hành tính năng mới lên GitHub (lkey124/QDLH) cho các máy khác cập nhật">
+        ☁️ Phát hành
+      </button>
+      <button id="btn-export-excel" class="btn-excel" title="Xuất danh sách ra file Excel (.csv)">
+        📊 Xuất Excel
+      </button>
+    </div>
+  </header>
+
+  <!-- ==================== MÀN HÌNH 1: TRA CỨU MÃ SỐ PHÂN BÓN ==================== -->
+  <main class="app-body active" id="tab-lookup">
+    <!-- Cột Chính Toàn Màn Hình: Tờ Hồ Sơ Văn Bản -->
+    <section class="main-canvas" id="detail-panel">
+      <div class="empty-state" id="empty-detail">
+        <h3>Nhập Mã số phân bón để tra cứu</h3>
+        <p>Gõ 5 chữ số mã phân bón (ví dụ: <b>09974</b>, <b>28703</b>, <b>31860</b>) vào thanh tìm kiếm phía trên hoặc bấm <b>➕ Thêm Tệp / Mã</b>.</p>
+      </div>
+      <div id="product-detail-content" class="doc-sheet hidden"></div>
+    </section>
+
+    <!-- Cột Phải: Ngăn Xem PDF Gốc (Hỗ trợ Zoom Lăn Chuột, Kéo Chuột Di Chuyển & Tự Xoay Thẳng) -->
+    <aside class="pdf-pane hidden" id="pdf-viewer-panel">
+      <div class="pdf-pane-bar">
+        <div class="pdf-btn-group">
+          <button id="btn-page-qd" class="pdf-pill-btn">Trang 1 (QĐ)</button>
+          <button id="btn-page-stt" class="pdf-pill-btn active">Trang Phụ lục</button>
+        </div>
+
+        <div class="pdf-btn-group">
+          <button id="btn-prev-page" class="pdf-sq-btn" title="Trang trước">◀</button>
+          <span id="pdf-page-indicator">1 / 1</span>
+          <button id="btn-next-page" class="pdf-sq-btn" title="Trang sau">▶</button>
+        </div>
+
+        <div class="pdf-btn-group">
+          <button id="btn-zoom-out" class="pdf-sq-btn" title="Thu nhỏ (-)">➖</button>
+          <button id="btn-zoom-reset" class="pdf-pill-btn" title="Đặt lại kích thước 100%">100%</button>
+          <button id="btn-zoom-in" class="pdf-sq-btn" title="Phóng to (+)">➕</button>
+        </div>
+
+        <div class="pdf-btn-group">
+          <button id="btn-rot-left" class="pdf-sq-btn" title="Xoay trái 90°">↺</button>
+          <button id="btn-rot-right" class="pdf-sq-btn" title="Xoay phải 90°">↻</button>
+          <button id="btn-open-external-pdf" class="pdf-pill-btn" title="Mở bằng phần mềm đọc PDF trên máy">🖨️ Mở rộng</button>
+          <button id="btn-close-pdf" class="pdf-close-btn" title="Đóng khung PDF">✕</button>
+        </div>
+      </div>
+
+      <div class="pdf-path-bar">
+        <span id="pdf-file-banner">Chưa chọn tệp PDF</span>
+        <span class="pdf-zoom-hint">🖱️ Lăn chuột hoặc nhấp đúp để Zoom • Kéo chuột để di chuyển</span>
+      </div>
+
+      <div class="pdf-viewport" id="pdf-canvas-container">
+        <img id="pdf-page-img" alt="Trang văn bản PDF" class="hidden" draggable="false" />
+        <div id="pdf-loading" class="pdf-loading hidden">Đang tải &amp; xoay thẳng trang PDF...</div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ==================== MÀN HÌNH 2: ĐƠN VỊ & ĐỊA CHỈ SÁP NHẬP ==================== -->
+  <main class="app-body page-scroll" id="tab-companies">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div>
+          <h2>🏢 Danh bạ Đơn vị Đăng ký &amp; Đối chiếu Địa chỉ Sáp nhập Hành chính</h2>
+          <p>Bấm trực tiếp vào bất kỳ ô địa chỉ nào để copy ngay. Mọi thay đổi địa chỉ đều được lưu riêng an toàn trên máy của bạn.</p>
+        </div>
+      </div>
+      <div id="companies-grid" class="companies-grid"></div>
+    </div>
+  </main>
+
+  <!-- ==================== MÀN HÌNH 3: VĂN BẢN QUYẾT ĐỊNH ==================== -->
+  <main class="app-body page-scroll" id="tab-decisions">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div>
+          <h2>📜 Danh mục Quyết định Công nhận Phân bón Lưu hành</h2>
+          <p>Tra cứu theo từng Quyết định của Cục Bảo vệ thực vật và danh sách các sản phẩm đi kèm.</p>
+        </div>
+        <button id="btn-add-from-decisions" class="btn-action primary">➕ Thêm Quyết định / Sản phẩm mới</button>
+      </div>
+      <div id="decisions-list" class="decisions-list"></div>
+    </div>
+  </main>
+
+  <!-- ==================== MÀN HÌNH 4: KHO TỆP PDF ==================== -->
+  <main class="app-body page-scroll" id="tab-files">
+    <div class="page-wrap">
+      <div class="page-head">
+        <div>
+          <h2>📁 Quản lý Kho Tệp PDF (Gồm Tệp Có Sẵn &amp; Tệp Bạn Thêm Mới)</h2>
+          <p>Bạn có thể bấm <b>➕ Thêm Tệp PDF từ máy tính</b> để nạp thêm bất kỳ tệp Lưu hành (<code>LH</code>), Hợp quy (<code>HQ</code>), <code>COA</code>, Ủy quyền (<code>GUQ</code>) nào vào máy.</p>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button id="btn-upload-multi-pdf" class="btn-action primary">➕ Thêm Tệp PDF từ máy tính</button>
+          <button id="btn-sync" class="btn-action secondary">🔄 Quét lại thư mục PDF</button>
+        </div>
+      </div>
+      <div id="files-table-wrapper" class="sheet-card"></div>
+    </div>
+  </main>
+
+  <!-- MODAL CHỈNH SỬA HỒ SƠ ĐÃ CÓ -->
+  <div id="edit-modal" class="modal-backdrop hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>✏️ Chỉnh sửa Thông tin Lưu hành &amp; Địa chỉ Sáp nhập</h3>
+        <button id="btn-close-modal" class="close-btn">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" style="justify-content:space-between;">
+        <button id="btn-delete-modal" class="btn-action danger" title="Xóa mã sản phẩm này khỏi máy">🗑️ Xóa mã này</button>
+        <div style="display:flex;gap:8px;">
+          <button id="btn-cancel-modal" class="btn-action secondary">Hủy</button>
+          <button id="btn-save-modal" class="btn-action primary">💾 Lưu thay đổi</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL THÊM TỆP PDF / MÃ PHÂN BÓN MỚI NGOÀI NHỮNG TỆP CÓ SẴN -->
+  <div id="add-modal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width:840px;">
+      <div class="modal-header" style="background:#047857;">
+        <h3>➕ Thêm Tệp PDF hoặc Mã Phân Bón Mới Vào Máy</h3>
+        <button id="btn-close-add-modal" class="close-btn">✕</button>
+      </div>
+      <div class="modal-body" id="add-modal-body">
+        <!-- Khu vực chọn tệp PDF từ máy tính -->
+        <div class="form-group full upload-zone" id="pdf-drop-zone">
+          <input type="file" id="add-pdf-file-input" accept=".pdf" class="hidden" />
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:700;font-size:13.5px;color:#065f46;">📄 1. Chọn tệp PDF văn bản từ máy tính (Tùy chọn)</div>
+              <div id="add-pdf-status" style="font-size:12px;color:#475569;margin-top:2px;">
+                Tệp PDF sẽ được tự động sao chép vào bộ nhớ phần mềm và xoay thẳng trang phụ lục.
+              </div>
+            </div>
+            <button type="button" id="btn-pick-pdf" class="btn-action primary" style="background:#059669;border-color:#059669;">
+              📂 Chọn tệp PDF từ máy...
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Loại hồ sơ</label>
+          <select id="add-doc-type" style="height:34px;padding:0 8px;border:1px solid #cbd5e1;border-radius:6px;font-weight:600;">
+            <option value="LH">LH — Quyết định Lưu hành &amp; Mã phân bón mới</option>
+            <option value="HQ">HQ — Hồ sơ Hợp quy / Thông báo KQKTNN</option>
+            <option value="COA">COA — Giấy chứng nhận phân tích (COA)</option>
+            <option value="UQ">UQ — Giấy ủy quyền / Hợp đồng ủy quyền</option>
+            <option value="KQPT">KQPT — Phiếu kết quả phân tích</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Mã số phân bón (MSLH - 5 chữ số) *</label>
+          <input type="text" id="add-mslh" placeholder="VD: 32568" />
+        </div>
+
+        <div class="form-group">
+          <label>Tên phân bón *</label>
+          <input type="text" id="add-ten" placeholder="VD: Phân bón hữu cơ..." />
+        </div>
+
+        <div class="form-group">
+          <label>Loại phân bón</label>
+          <input type="text" id="add-loai" placeholder="VD: Phân bón hữu cơ / Phân bón lá NPK..." value="Phân bón hữu cơ" />
+        </div>
+
+        <div class="form-group">
+          <label>STT trong Quyết định &amp; Trang Phụ lục PDF</label>
+          <div style="display:flex;gap:8px;">
+            <input type="number" id="add-stt" value="1" min="1" style="width:50%;" title="STT trong bảng phụ lục" />
+            <input type="number" id="add-page" value="2" min="1" style="width:50%;" title="Trang PDF chứa sản phẩm này" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Phương thức sử dụng &amp; Hạn sử dụng</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="add-phuong-thuc" value="Bón rễ" style="width:45%;" placeholder="Bón rễ / Bón lá" />
+            <input type="text" id="add-hsd" value="36 tháng kể từ ngày sản xuất" style="width:55%;" />
+          </div>
+        </div>
+
+        <div class="form-group full">
+          <label>Chỉ tiêu chất lượng (Nhập hoặc dán nội dung cột Chỉ tiêu chất lượng)</label>
+          <textarea id="add-chi-tieu" rows="3" placeholder="VD: Chất hữu cơ: 25%; Đạm tổng số (Nts): 3%; pHH2O: 5; Độ ẩm: 25%..."></textarea>
+        </div>
+
+        <div class="form-group full">
+          <label>Hướng dẫn sử dụng (Nhập hoặc dán nội dung cột Hướng dẫn sử dụng)</label>
+          <textarea id="add-hdsd" rows="3" placeholder="VD: 1. Cây ăn trái: Bón 200-300 kg/ha/vụ..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Số Quyết định (Nếu gõ số QĐ đã có sẽ tự điền thông tin công ty)</label>
+          <input type="text" id="add-so-qd" placeholder="VD: 2200/QĐ-BVTV-PB" />
+        </div>
+
+        <div class="form-group">
+          <label>Ngày ban hành &amp; Ngày hết hạn</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="add-ngay-bh" placeholder="VD: 15/06/2025" style="width:50%;" />
+            <input type="text" id="add-ngay-hh" placeholder="VD: 15/06/2030" style="width:50%;" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Tên Đơn vị đăng ký</label>
+          <input type="text" id="add-don-vi" placeholder="VD: Công ty TNHH..." />
+        </div>
+
+        <div class="form-group">
+          <label>Mã số doanh nghiệp &amp; Điện thoại</label>
+          <div style="display:flex;gap:8px;">
+            <input type="text" id="add-msdn" placeholder="Mã số thuế" style="width:50%;" />
+            <input type="text" id="add-sdt" placeholder="Số điện thoại" style="width:50%;" />
+          </div>
+        </div>
+
+        <div class="form-group full">
+          <label>📍 Địa chỉ gốc (ghi trong Quyết định)</label>
+          <input type="text" id="add-dc-goc" placeholder="Địa chỉ in trên văn bản Quyết định..." />
+        </div>
+
+        <div class="form-group full">
+          <label>🗺️ Địa chỉ sau Sáp nhập đơn vị hành chính</label>
+          <input type="text" id="add-dc-sap-nhap" placeholder="Địa chỉ mới sau sáp nhập phường/xã/tỉnh..." />
+        </div>
+
+        <div class="form-group full">
+          <label>💡 Ghi chú chi tiết sáp nhập</label>
+          <input type="text" id="add-ghi-chu-sn" placeholder="Ghi chú căn cứ sáp nhập (tùy chọn)..." />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-cancel-add-modal" class="btn-action secondary">Hủy</button>
+        <button id="btn-save-add-modal" class="btn-action primary" style="background:#047857;border-color:#047857;">💾 Lưu &amp; Thêm vào Máy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input ẩn dùng để tải nhanh nhiều tệp PDF từ tab Tệp -->
+  <input type="file" id="multi-pdf-input" accept=".pdf" multiple class="hidden" />
+
+  <!-- TOAST THÔNG BÁO -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
