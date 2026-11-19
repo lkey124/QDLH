@@ -6,6 +6,8 @@ Phần mềm Windows độc lập dùng để quản lý và tra cứu tức th�
 
 ## ⬇️ TẢI BỘ CÀI ĐẶT PHẦN MỀM (WINDOWS `.EXE`)
 
+[![Lượt tải bộ cài đặt](https://img.shields.io/github/downloads/lkey124/QDLH/total?label=L%C6%B0%E1%BB%A3t%20t%E1%BA%A3i%20QDLH_Vault_Setup.exe&style=for-the-badge&color=047857)](https://github.com/lkey124/QDLH/releases/latest/download/QDLH_Vault_Setup.exe)
+
 ### 👉 [**NHẤN VÀO ĐÂY ĐỂ TẢI VỀ `QDLH_Vault_Setup.exe` (Bản cài đặt đầy đủ)**](https://github.com/lkey124/QDLH/releases/latest/download/QDLH_Vault_Setup.exe)
 
 *(Hoặc xem tại trang [GitHub Releases](https://github.com/lkey124/QDLH/releases/latest))*
