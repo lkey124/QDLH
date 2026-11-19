@@ -1,7 +1,7 @@
 {
-  "version": "1.2.5",
-  "build_num": 7,
+  "version": "1.2.6",
+  "build_num": 8,
   "updated_at": "19/11/2026 09:58",
   "repo": "lkey124/QDLH",
-  "note": "Phân loại Tệp có sẵn vs Tệp mới thêm, cảnh báo Trùng tệp/Trùng mã số, bỏ nhãn Sắp hết hạn và thêm chữ Crafted by binhluu"
+  "note": "Cập nhật tính năng mới QĐLH Vault"
 }
