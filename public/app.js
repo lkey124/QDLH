@@ -340,7 +340,6 @@ function renderProductDetail(p) {
             <span class="badge">📦 ${escapeHtml(p.loai_phan_bon)}</span>
             <span class="badge">🌱 ${escapeHtml(p.phuong_thuc_su_dung)}</span>
             <span class="badge">📜 QĐ ${escapeHtml(p.so_qd_full)} (STT ${escapeHtml(p.stt)})</span>
-            <span class="badge ${st.code}">${escapeHtml(st.label)}</span>
           </div>
         </div>
       </div>
@@ -690,7 +689,6 @@ function renderDecisionsTab() {
           <div style="font-size:14.5px;font-weight:700;color:var(--brand);">
             📜 Quyết định số ${escapeHtml(d.so_qd)} (Ngày ${escapeHtml(d.ngay_ban_hanh)}) — ${escapeHtml(d.don_vi_dang_ky)}
           </div>
-          <span class="badge ${st.code}">${escapeHtml(st.label)}</span>
         </div>
 
         <div class="address-strip">

@@ -1,7 +1,7 @@
 {
-  "version": "1.2.4",
-  "build_num": 6,
-  "updated_at": "19/11/2026 09:53",
+  "version": "1.2.5",
+  "build_num": 7,
+  "updated_at": "19/11/2026 09:58",
   "repo": "lkey124/QDLH",
-  "note": "Phân loại Tệp có sẵn vs Tệp mới thêm, cảnh báo Trùng tệp PDF / Trùng mã số phân bón và sửa hiển thị trang PDF offline"
+  "note": "Phân loại Tệp có sẵn vs Tệp mới thêm, cảnh báo Trùng tệp/Trùng mã số, bỏ nhãn Sắp hết hạn và thêm chữ Crafted by binhluu"
 }

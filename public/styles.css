@@ -1424,3 +1424,17 @@ html, body {
   border-left-color: #dc2626;
   color: #991b1b;
 }
+
+.crafted-credit {
+  position: fixed;
+  bottom: 4px;
+  right: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  opacity: 0.78;
+  pointer-events: none;
+  user-select: none;
+  z-index: 90;
+  letter-spacing: 0.2px;
+}
