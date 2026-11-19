@@ -1327,27 +1327,4 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("btn-cancel-modal").addEventListener("click", () => {
     document.getElementById("edit-modal").classList.add("hidden");
   });
-
-  document.getElementById("btn-export-excel").addEventListener("click", async () => {
-    const res = await fetch("/api/save-excel", { method: "POST" });
-    const data = await res.json();
-    if (data.saved_path) {
-      showToast(`📊 Đã xuất file Excel tại: ${data.saved_path}`);
-    } else if (data.fallback_url) {
-      window.location.href = "/api/export-csv";
-    }
-  });
-
-  const btnSync = document.getElementById("btn-sync");
-  if (btnSync) {
-    btnSync.addEventListener("click", async () => {
-      showToast("🔄 Đang quét lại thư mục PDF...");
-      const res = await fetch("/api/sync-folder", { method: "POST" });
-      const data = await res.json();
-      await loadAllData();
-      TABS_RENDERED.files = false;
-      renderFilesTab();
-      showToast(`✅ Đã đồng bộ ${data.scanned_files} tệp PDF`);
-    });
-  }
 });
