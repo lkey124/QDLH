@@ -140,12 +140,9 @@ async function loadAllData() {
 
   buildFastIndexes();
 
-  document.getElementById("badge-companies").textContent = APP_DATA.companies.length;
-  document.getElementById("badge-decisions").textContent = APP_DATA.decisions.length;
-  document.getElementById("badge-files").textContent = APP_DATA.pdf_files.length;
-
   if (APP_DATA.version_info && APP_DATA.version_info.version) {
-    document.getElementById("app-version-badge").textContent = `v${APP_DATA.version_info.version}`;
+    const vBadge = document.getElementById("app-version-badge");
+    if (vBadge) vBadge.textContent = `v${APP_DATA.version_info.version}`;
   }
 
   const pubBtn = document.getElementById("btn-publish-update");
@@ -153,9 +150,6 @@ async function loadAllData() {
     pubBtn.classList.toggle("hidden", !APP_DATA.is_git_repo);
   }
 
-  TABS_RENDERED = { companies: false, decisions: false, files: false };
-
-  populateCompanyFilter();
   applyFiltersAndRender(false);
 
   if (!SELECTED_PRODUCT && FILTERED_PRODUCTS.length > 0) {
@@ -209,15 +203,11 @@ function applyFiltersAndRender(showDropdown = true) {
   document.getElementById("clear-search").classList.toggle("hidden", !qRaw);
 
   const qNorm = removeAccents(qRaw);
-  const scope = document.getElementById("filter-scope").value;
-  const companyFilter = document.getElementById("filter-company").value;
 
   const matched = [];
   const allProds = APP_DATA.products;
   for (let i = 0; i < allProds.length; i++) {
     const p = allProds[i];
-    if (scope === "folder" && !p.is_in_folder) continue;
-    if (companyFilter && p.don_vi_dang_ky !== companyFilter) continue;
     if (qNorm && !p._searchStr.includes(qNorm)) continue;
     matched.push(p);
   }
@@ -968,57 +958,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // 3. Ủy quyền sự kiện cho các Tab phụ (Companies, Decisions, Files)
-  document.getElementById("companies-grid").addEventListener("click", (e) => {
-    const copyEl = e.target.closest("[data-copy]");
-    if (copyEl) {
-      copyText(copyEl.getAttribute("data-copy"), copyEl.getAttribute("data-label"));
-      return;
-    }
-    const editBtn = e.target.closest("[data-edit-company]");
-    if (editBtn) {
-      const compName = editBtn.getAttribute("data-edit-company");
-      const sampleProd = APP_DATA.products.find((x) => x.don_vi_dang_ky === compName);
-      if (sampleProd) openEditModal(sampleProd);
-      return;
-    }
-    const filterBtn = e.target.closest("[data-filter-company]");
-    if (filterBtn) {
-      document.getElementById("filter-company").value = filterBtn.getAttribute("data-filter-company");
-      document.getElementById("main-search").value = "";
-      switchTab("lookup");
-      applyFiltersAndRender(true);
-    }
-  });
-
-  document.getElementById("decisions-list").addEventListener("click", (e) => {
-    const copyEl = e.target.closest("[data-copy]");
-    if (copyEl) {
-      copyText(copyEl.getAttribute("data-copy"), copyEl.getAttribute("data-label"));
-      return;
-    }
-    const jumpBtn = e.target.closest("[data-jump-prod]");
-    if (jumpBtn) {
-      const id = parseInt(jumpBtn.getAttribute("data-jump-prod"), 10);
-      const prod = PRODUCTS_BY_ID.get(id);
-      if (prod) {
-        switchTab("lookup");
-        selectProduct(prod);
-      }
-    }
-  });
-
-  document.getElementById("files-table-wrapper").addEventListener("click", (e) => {
-    const diskBtn = e.target.closest("[data-open-disk]");
-    if (diskBtn) {
-      openFileOnDisk(diskBtn.getAttribute("data-open-disk"), diskBtn.getAttribute("data-mode"));
-    }
-  });
-
   // ==================== TÍNH NĂNG THÊM TỆP PDF / MÃ MỚI ====================
   document.getElementById("btn-add-new").addEventListener("click", openAddModal);
-  const btnAddDec = document.getElementById("btn-add-from-decisions");
-  if (btnAddDec) btnAddDec.addEventListener("click", openAddModal);
 
   document.getElementById("btn-close-add-modal").addEventListener("click", () => {
     document.getElementById("add-modal").classList.add("hidden");
@@ -1216,7 +1157,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("main-search").addEventListener("input", () => {
     if (SEARCH_RAF_ID) cancelAnimationFrame(SEARCH_RAF_ID);
     SEARCH_RAF_ID = requestAnimationFrame(() => {
-      switchTab("lookup");
       applyFiltersAndRender(true);
     });
   });
@@ -1233,16 +1173,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     inp.value = "";
     inp.focus();
     applyFiltersAndRender(false);
-  });
-
-  document.getElementById("filter-scope").addEventListener("change", () => applyFiltersAndRender(false));
-  document.getElementById("filter-company").addEventListener("change", () => {
-    switchTab("lookup");
-    applyFiltersAndRender(true);
-  });
-
-  document.querySelectorAll(".tab-pill").forEach((btn) => {
-    btn.addEventListener("click", () => switchTab(btn.getAttribute("data-tab")));
   });
 
   // Phím tắt mũi tên Lên / Xuống để duyệt nhanh danh sách Mã số phân bón

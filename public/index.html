@@ -23,40 +23,13 @@
       <input
         type="text"
         id="main-search"
-        placeholder="Gõ Mã số phân bón (VD: 09974, 28703, 31860...) hoặc tên SP, số QĐ, công ty... (Phím ↑↓ để chuyển mã)"
+        placeholder="Gõ Mã số phân bón (VD: 09974, 28703, 31860...) hoặc tên sản phẩm, số Quyết định, công ty... (Phím ↑↓ để chuyển mã)"
         autocomplete="off"
         autofocus
       />
       <button id="clear-search" class="clear-search-btn hidden" title="Xóa tìm kiếm">✕</button>
       <div id="search-dropdown" class="search-dropdown hidden"></div>
     </div>
-
-    <!-- Bộ lọc nhanh -->
-    <div class="header-filters">
-      <select id="filter-company" class="header-select" title="Lọc theo Đơn vị đăng ký">
-        <option value="">Tất cả Đơn vị</option>
-      </select>
-      <select id="filter-scope" class="header-select" title="Phạm vi hiển thị">
-        <option value="all">Tất cả mã PB</option>
-        <option value="folder">Mã có tệp PDF riêng</option>
-      </select>
-    </div>
-
-    <!-- Chuyển Tab Chế độ xem -->
-    <nav class="header-tabs">
-      <button class="tab-pill active" data-tab="lookup" title="Tra cứu chi tiết Mã số phân bón">
-        🔍 Tra cứu
-      </button>
-      <button class="tab-pill" data-tab="companies" title="Danh bạ Đơn vị &amp; Địa chỉ Sáp nhập">
-        🏢 Đơn vị (<span id="badge-companies">0</span>)
-      </button>
-      <button class="tab-pill" data-tab="decisions" title="Danh sách Văn bản Quyết định">
-        📜 QĐ (<span id="badge-decisions">0</span>)
-      </button>
-      <button class="tab-pill" data-tab="files" title="Quản lý tệp PDF trong máy">
-        📁 Tệp (<span id="badge-files">0</span>)
-      </button>
-    </nav>
 
     <!-- Cụm nút chức năng: Thêm Tệp/Mã mới + Cập nhật tính năng + Phát hành + Xuất Excel -->
     <div class="header-actions">
@@ -125,50 +98,6 @@
         <div id="pdf-loading" class="pdf-loading hidden">Đang tải &amp; xoay thẳng trang PDF...</div>
       </div>
     </aside>
-  </main>
-
-  <!-- ==================== MÀN HÌNH 2: ĐƠN VỊ & ĐỊA CHỈ SÁP NHẬP ==================== -->
-  <main class="app-body page-scroll" id="tab-companies">
-    <div class="page-wrap">
-      <div class="page-head">
-        <div>
-          <h2>🏢 Danh bạ Đơn vị Đăng ký &amp; Đối chiếu Địa chỉ Sáp nhập Hành chính</h2>
-          <p>Bấm trực tiếp vào bất kỳ ô địa chỉ nào để copy ngay. Mọi thay đổi địa chỉ đều được lưu riêng an toàn trên máy của bạn.</p>
-        </div>
-      </div>
-      <div id="companies-grid" class="companies-grid"></div>
-    </div>
-  </main>
-
-  <!-- ==================== MÀN HÌNH 3: VĂN BẢN QUYẾT ĐỊNH ==================== -->
-  <main class="app-body page-scroll" id="tab-decisions">
-    <div class="page-wrap">
-      <div class="page-head">
-        <div>
-          <h2>📜 Danh mục Quyết định Công nhận Phân bón Lưu hành</h2>
-          <p>Tra cứu theo từng Quyết định của Cục Bảo vệ thực vật và danh sách các sản phẩm đi kèm.</p>
-        </div>
-        <button id="btn-add-from-decisions" class="btn-action primary">➕ Thêm Quyết định / Sản phẩm mới</button>
-      </div>
-      <div id="decisions-list" class="decisions-list"></div>
-    </div>
-  </main>
-
-  <!-- ==================== MÀN HÌNH 4: KHO TỆP PDF ==================== -->
-  <main class="app-body page-scroll" id="tab-files">
-    <div class="page-wrap">
-      <div class="page-head">
-        <div>
-          <h2>📁 Quản lý Kho Tệp PDF (Gồm Tệp Có Sẵn &amp; Tệp Bạn Thêm Mới)</h2>
-          <p>Bạn có thể bấm <b>➕ Thêm Tệp PDF từ máy tính</b> để nạp thêm bất kỳ tệp Lưu hành (<code>LH</code>), Hợp quy (<code>HQ</code>), <code>COA</code>, Ủy quyền (<code>GUQ</code>) nào vào máy.</p>
-        </div>
-        <div style="display:flex;gap:8px;">
-          <button id="btn-upload-multi-pdf" class="btn-action primary">➕ Thêm Tệp PDF từ máy tính</button>
-          <button id="btn-sync" class="btn-action secondary">🔄 Quét lại thư mục PDF</button>
-        </div>
-      </div>
-      <div id="files-table-wrapper" class="sheet-card"></div>
-    </div>
   </main>
 
   <!-- MODAL CHỈNH SỬA HỒ SƠ ĐÃ CÓ -->

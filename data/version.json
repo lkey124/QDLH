@@ -1,7 +1,7 @@
 {
-  "version": "1.1.0",
-  "build_num": 1,
-  "updated_at": "18/11/2026 17:15",
+  "version": "1.2.1",
+  "build_num": 3,
+  "updated_at": "19/11/2026 08:35",
   "repo": "lkey124/QDLH",
-  "note": "Bản phát hành dữ liệu chuẩn 317 mã phân bón, 36 QĐ, 24 Đơn vị & 255 trang PDF gốc đã xoay thẳng"
+  "note": "Giao diện tối giản 1 màn hình tra cứu duy nhất (loại bỏ bộ lọc phụ & các tab Đơn vị/QĐ/Tệp trên thanh công cụ)"
 }
