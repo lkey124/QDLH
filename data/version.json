@@ -1,7 +1,7 @@
 {
-  "version": "1.2.2",
-  "build_num": 4,
-  "updated_at": "19/11/2026 08:37",
+  "version": "1.2.3",
+  "build_num": 5,
+  "updated_at": "19/11/2026 08:55",
   "repo": "lkey124/QDLH",
-  "note": "Bỏ nút Xuất Excel trên thanh công cụ cho giao diện gọn tối đa"
+  "note": "Cập nhật tính năng mới QĐLH Vault"
 }
