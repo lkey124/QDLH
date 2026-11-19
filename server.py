@@ -30,16 +30,14 @@ def _resolve_base_dir():
     # Ưu tiên thư mục cài đặt cạnh file .exe nếu có sẵn public/ và data/
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-        if os.path.exists(os.path.join(exe_dir, "public")) and os.path.exists(os.path.join(exe_dir, "data")):
-            return exe_dir
-        parent_dir = os.path.dirname(exe_dir)
-        if os.path.exists(os.path.join(parent_dir, "public")) and os.path.exists(os.path.join(parent_dir, "data")):
-            return parent_dir
+        for cand in (exe_dir, os.path.dirname(exe_dir), os.path.dirname(os.path.dirname(exe_dir))):
+            if os.path.exists(os.path.join(cand, "public")) and os.path.exists(os.path.join(cand, "data")):
+                return cand
     here = os.path.dirname(os.path.abspath(__file__))
     if os.path.exists(os.path.join(here, "public")) and os.path.exists(os.path.join(here, "data")):
         return here
     default_dir = r"C:\Users\binhl\.gemini\antigravity\scratch\qdlh-app"
-    if os.path.exists(os.path.join(default_dir, "public")) and os.path.exists(os.path.join(default_dir, "data")):
+    if os.path.exists(default_dir, "public") if False else (os.path.exists(os.path.join(default_dir, "public")) and os.path.exists(os.path.join(default_dir, "data"))):
         return default_dir
     return here
 
@@ -437,8 +435,36 @@ def refresh_memory_cache():
 
     meta_map = {}
     known_paths = set()
+    builtin_by_name = {}
+    builtin_by_md5_mslh = {}
+
     for pf in pdf_files:
         fp = pf.get("full_path") or ""
+        fname_lower = (pf.get("file_name") or os.path.basename(fp)).strip().lower()
+        is_user = ("user_pdfs" in fp.lower()) or (int(pf.get("id") or 0) > 97)
+        pf["is_user_added"] = is_user
+        if not is_user:
+            if fname_lower and fname_lower not in builtin_by_name:
+                builtin_by_name[fname_lower] = pf
+            key_mm = (pf.get("md5_hash") or "", pf.get("mslh") or "")
+            if key_mm[0] and key_mm not in builtin_by_md5_mslh:
+                builtin_by_md5_mslh[key_mm] = pf
+
+    seen_user_names = {}
+    for pf in pdf_files:
+        fp = pf.get("full_path") or ""
+        fname_lower = (pf.get("file_name") or os.path.basename(fp)).strip().lower()
+        key_mm = (pf.get("md5_hash") or "", pf.get("mslh") or "")
+        dup_target = None
+        if pf.get("is_user_added"):
+            dup_target = builtin_by_name.get(fname_lower) or builtin_by_md5_mslh.get(key_mm) or seen_user_names.get(fname_lower)
+            seen_user_names[fname_lower] = pf
+        pf["is_duplicate"] = bool(dup_target)
+        if dup_target:
+            pf["duplicate_note"] = f"Trùng với tệp có sẵn: {dup_target.get('file_name', '')}"
+        else:
+            pf["duplicate_note"] = ""
+
         if fp:
             nk = _norm_path(fp)
             known_paths.add(nk)
@@ -475,6 +501,10 @@ def refresh_memory_cache():
 
     rel_by_mslh = {}
     for rd in related_docs:
+        rd_path = rd.get("pdf_path") or ""
+        rd_meta = meta_map.get(_norm_path(rd_path)) or meta_map.get(os.path.basename(rd_path).lower(), {})
+        rd["pdf_md5"] = rd_meta.get("md5_prefix", "")
+        rd["pdf_page_count"] = rd_meta.get("page_count") or 1
         for code in re.findall(r"\d{5}", rd.get("mslh", "")):
             rel_by_mslh.setdefault(code, []).append(rd)
 
@@ -493,13 +523,17 @@ def refresh_memory_cache():
             elif d.get("default_pdf_path"):
                 best_pdf = d["default_pdf_path"]
 
-        pdf_meta = meta_map.get(_norm_path(best_pdf), {})
+        pdf_meta = meta_map.get(_norm_path(best_pdf)) or meta_map.get(os.path.basename(best_pdf).lower(), {})
         pdf_page_count = pdf_meta.get("page_count") or (p_files[0]["page_count"] if p_files else 2)
+        pdf_md5 = pdf_meta.get("md5_prefix") or (p_files[0]["md5_hash"][:8] if p_files and p_files[0].get("md5_hash") else (d.get("pdf_md5") or "")[:8])
+        is_user_prod = str(p.get("doc_id") or "").startswith("doc_user_") or ("user_pdfs" in str(best_pdf or "").lower())
 
         products.append({
             **p,
             "pdf_path": best_pdf,
             "pdf_page_count": pdf_page_count,
+            "pdf_md5": pdf_md5,
+            "is_user_added": is_user_prod,
             "so_qd_full": d.get("so_qd") or p.get("so_qd") or "",
             "ngay_ban_hanh": d.get("ngay_ban_hanh", ""),
             "ngay_hieu_luc": d.get("ngay_hieu_luc", ""),
@@ -674,6 +708,8 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
             self.handle_add_record(body)
         elif path == "/api/delete-product":
             self.handle_delete_product(body)
+        elif path == "/api/delete-pdf-file":
+            self.handle_delete_pdf_file(body)
         elif path == "/api/open-file":
             self.handle_open_file(body)
         elif path == "/api/sync-folder":
@@ -694,32 +730,84 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
         self.send_raw_bytes(DATA_CACHE_BYTES, "application/json; charset=utf-8")
 
     def handle_upload_pdf(self, qs, raw_bytes):
-        """Lưu tệp PDF do người dùng chọn vào thư mục data/user_pdfs của máy, xoay thẳng trang và trích xuất gợi ý."""
+        """Lưu tệp PDF do người dùng chọn vào thư mục data/user_pdfs của máy, kiểm tra trùng tệp/trùng mã số, xoay thẳng trang và trích xuất gợi ý."""
         raw_name = qs.get("name", ["Ho_So_Moi.pdf"])[0]
-        safe_name = os.path.basename(raw_name).strip()
-        if not safe_name.lower().endswith(".pdf"):
-            safe_name += ".pdf"
+        force = qs.get("force", ["0"])[0] == "1"
+        orig_name = os.path.basename(raw_name).strip()
+        if not orig_name.lower().endswith(".pdf"):
+            orig_name += ".pdf"
 
         if not raw_bytes:
             return self.send_json({"ok": False, "error": "Tệp PDF rỗng"}, 400)
 
-        os.makedirs(USER_PDFS_DIR, exist_ok=True)
-        dest_path = os.path.join(USER_PDFS_DIR, safe_name)
-        if os.path.exists(dest_path):
-            base_n, ext_n = os.path.splitext(safe_name)
-            dest_path = os.path.join(USER_PDFS_DIR, f"{base_n}_{int(time.time())}{ext_n}")
-            safe_name = os.path.basename(dest_path)
-
         try:
-            with open(dest_path, "wb") as fp:
-                fp.write(raw_bytes)
             fsize = len(raw_bytes)
             md5_hash = hashlib.md5(raw_bytes).hexdigest()
-            pcount = pre_render_pdf_pages(raw_bytes, safe_name, md5_hash[:8])
-            meta = parse_filename_metadata(safe_name)
+            meta = parse_filename_metadata(orig_name)
 
             conn = get_db()
             cur = conn.cursor()
+
+            # 1. Kiểm tra tệp PDF bị trùng (trùng tên tệp hoặc trùng nội dung MD5 + cùng mã số/số QĐ)
+            existing_pdf_row = cur.execute(
+                """
+                SELECT * FROM pdf_files
+                WHERE LOWER(file_name) = LOWER(?)
+                   OR (md5_hash = ? AND (mslh = ? OR ? = ''))
+                ORDER BY id ASC LIMIT 1
+                """,
+                (orig_name, md5_hash, meta["mslh"], meta["mslh"])
+            ).fetchone()
+            existing_pdf = dict(existing_pdf_row) if existing_pdf_row else None
+
+            # 2. Kiểm tra Mã số phân bón (MSLH) bị trùng trong bảng products
+            existing_prod = None
+            if meta["mslh"]:
+                row_prod = cur.execute(
+                    "SELECT p.*, d.don_vi_dang_ky, d.so_qd AS so_qd_full FROM products p LEFT JOIN decisions d ON p.doc_id = d.doc_id WHERE p.mslh = ? LIMIT 1",
+                    (meta["mslh"],)
+                ).fetchone()
+                if row_prod:
+                    existing_prod = dict(row_prod)
+
+            matched_dec = None
+            if meta["qd_key"]:
+                row_dec = cur.execute("SELECT * FROM decisions WHERE qd_key=? LIMIT 1", (meta["qd_key"],)).fetchone()
+                if row_dec:
+                    matched_dec = dict(row_dec)
+
+            pcount = pre_render_pdf_pages(raw_bytes, orig_name, md5_hash[:8])
+
+            # Nếu tệp đã tồn tại trong App và chưa bấm ép buộc lưu bản sao mới -> Cảnh báo tệp trùng ngay và không tạo bản sao rác
+            if existing_pdf and not force:
+                conn.close()
+                is_builtin = ("user_pdfs" not in (existing_pdf.get("full_path") or "").lower()) and int(existing_pdf.get("id") or 0) <= 97
+                return self.send_json({
+                    "ok": True,
+                    "is_duplicate_file": True,
+                    "duplicate_source": "Tệp có sẵn trong App" if is_builtin else "Tệp mới thêm trước đó",
+                    "duplicate_file_info": existing_pdf,
+                    "is_duplicate_mslh": bool(existing_prod),
+                    "duplicate_product_info": existing_prod,
+                    "saved_path": existing_pdf["full_path"],
+                    "file_name": existing_pdf["file_name"],
+                    "page_count": existing_pdf.get("page_count") or pcount,
+                    "md5_hash": md5_hash,
+                    "parsed_meta": meta,
+                    "matched_decision": matched_dec
+                })
+
+            os.makedirs(USER_PDFS_DIR, exist_ok=True)
+            safe_name = orig_name
+            dest_path = os.path.join(USER_PDFS_DIR, safe_name)
+            if os.path.exists(dest_path):
+                base_n, ext_n = os.path.splitext(safe_name)
+                dest_path = os.path.join(USER_PDFS_DIR, f"{base_n}_{int(time.time())}{ext_n}")
+                safe_name = os.path.basename(dest_path)
+
+            with open(dest_path, "wb") as fp:
+                fp.write(raw_bytes)
+
             cur.execute("""
                 INSERT INTO pdf_files (file_name, full_path, file_size, md5_hash, doc_type, mslh, qd_key, stt, page_count)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -733,18 +821,16 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
                     page_count=excluded.page_count
             """, (safe_name, dest_path, fsize, md5_hash, meta["doc_type"], meta["mslh"], meta["qd_key"], meta["stt"], pcount))
 
-            matched_dec = None
-            if meta["qd_key"]:
-                row_dec = cur.execute("SELECT * FROM decisions WHERE qd_key=? LIMIT 1", (meta["qd_key"],)).fetchone()
-                if row_dec:
-                    matched_dec = dict(row_dec)
-
             conn.commit()
             conn.close()
             refresh_memory_cache()
 
             self.send_json({
                 "ok": True,
+                "is_duplicate_file": bool(existing_pdf),
+                "duplicate_file_info": existing_pdf,
+                "is_duplicate_mslh": bool(existing_prod),
+                "duplicate_product_info": existing_prod,
                 "saved_path": dest_path,
                 "file_name": safe_name,
                 "page_count": pcount,
@@ -900,6 +986,26 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
         refresh_memory_cache()
         self.send_json({"ok": True})
 
+    def handle_delete_pdf_file(self, body):
+        fid = body.get("id")
+        if not fid:
+            return self.send_json({"ok": False, "error": "Thiếu ID tệp PDF"}, 400)
+        conn = get_db()
+        cur = conn.cursor()
+        row = cur.execute("SELECT * FROM pdf_files WHERE id=?", (int(fid),)).fetchone()
+        if row:
+            fp = row["full_path"] or ""
+            cur.execute("DELETE FROM pdf_files WHERE id=?", (int(fid),))
+            conn.commit()
+            if "user_pdfs" in fp.lower() and os.path.exists(fp):
+                try:
+                    os.remove(fp)
+                except Exception:
+                    pass
+        conn.close()
+        refresh_memory_cache()
+        self.send_json({"ok": True})
+
     def get_auto_rotation(self, full_path, page_idx, page):
         nk = _norm_path(full_path)
         meta = PDF_META_CACHE.get(nk)
@@ -963,15 +1069,26 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
                 img_bytes = PDF_PAGE_CACHE[cache_key]
                 return self.send_raw_bytes(img_bytes, "image/jpeg", status=200, cache_control="max-age=86400")
 
+        url_md5 = (qs.get("md5", [""])[0] or "").strip()[:8]
         meta = PDF_META_CACHE.get(nk) or PDF_META_CACHE.get(os.path.basename(pdf_path).lower(), {})
-        md5_prefix = meta.get("md5_prefix", "")
+        md5_prefix = url_md5 or meta.get("md5_prefix", "")
         pre_jpg_path = os.path.join(PDF_PAGES_DIR, f"{md5_prefix}_p{page_num}.jpg") if md5_prefix else ""
 
         # 1. Nếu có sẵn trang ảnh đã xoay thẳng trong data/pdf_pages (chạy Offline trên mọi máy tính)
-        if pre_jpg_path and os.path.exists(pre_jpg_path) and extra_rot == 0:
+        if pre_jpg_path and os.path.exists(pre_jpg_path):
             try:
                 with open(pre_jpg_path, "rb") as fp:
-                    img_bytes = fp.read()
+                    raw_jpg = fp.read()
+                if extra_rot == 0:
+                    img_bytes = raw_jpg
+                else:
+                    doc = fitz.open(stream=raw_jpg, filetype="jpeg")
+                    pdf_conv = doc.convert_to_pdf()
+                    doc.close()
+                    pdoc = fitz.open("pdf", pdf_conv)
+                    pdoc[0].set_rotation(extra_rot)
+                    img_bytes = pdoc[0].get_pixmap(dpi=150, alpha=False).tobytes("jpeg", jpg_quality=90)
+                    pdoc.close()
                 with _CACHE_LOCK:
                     PDF_PAGE_CACHE[cache_key] = img_bytes
                     if len(PDF_PAGE_CACHE) > MAX_PDF_PAGE_CACHE:
@@ -1197,6 +1314,19 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
 
             init_db()
             refresh_memory_cache()
+            try:
+                import importlib.util
+                srv_path = os.path.join(BASE_DIR, "server.py")
+                if os.path.exists(srv_path):
+                    spec = importlib.util.spec_from_file_location("server_hot", srv_path)
+                    hot_mod = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(hot_mod)
+                    hot_mod.refresh_memory_cache()
+                    for attr_name, attr_val in hot_mod.QDLHRequestHandler.__dict__.items():
+                        if callable(attr_val) and not attr_name.startswith("__"):
+                            setattr(QDLHRequestHandler, attr_name, attr_val)
+            except Exception:
+                pass
             new_ver = get_local_version()
             self.send_json({
                 "ok": True,

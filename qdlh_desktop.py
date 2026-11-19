@@ -18,11 +18,9 @@ import webview
 def _find_app_root():
     if getattr(sys, "frozen", False):
         exe_dir = os.path.dirname(os.path.abspath(sys.executable))
-        if os.path.exists(os.path.join(exe_dir, "public")) and os.path.exists(os.path.join(exe_dir, "data")):
-            return exe_dir
-        parent_dir = os.path.dirname(exe_dir)
-        if os.path.exists(os.path.join(parent_dir, "public")) and os.path.exists(os.path.join(parent_dir, "data")):
-            return parent_dir
+        for cand in (exe_dir, os.path.dirname(exe_dir), os.path.dirname(os.path.dirname(exe_dir))):
+            if os.path.exists(os.path.join(cand, "public")) and os.path.exists(os.path.join(cand, "data")):
+                return cand
     here = os.path.dirname(os.path.abspath(__file__))
     if os.path.exists(os.path.join(here, "public")) and os.path.exists(os.path.join(here, "data")):
         return here

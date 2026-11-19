@@ -108,6 +108,11 @@
         <button id="btn-close-pdf-lib" class="close-btn">✕</button>
       </div>
       <div class="pdf-lib-toolbar">
+        <div class="pdf-src-tabs" id="pdf-lib-source-tabs">
+          <button class="pdf-src-tab active" data-src="ALL" id="tab-pdf-src-all">📚 Tất cả tệp (97)</button>
+          <button class="pdf-src-tab" data-src="BUILTIN" id="tab-pdf-src-builtin">📦 Tệp có sẵn trong App (97)</button>
+          <button class="pdf-src-tab" data-src="USER" id="tab-pdf-src-user">🆕 Tệp mới thêm (0)</button>
+        </div>
         <input
           type="text"
           id="pdf-lib-search"
@@ -115,7 +120,7 @@
           autocomplete="off"
         />
         <div class="pdf-lib-filters" id="pdf-lib-type-filters">
-          <button class="sib-chip active" data-dtype="ALL">Tất cả</button>
+          <button class="sib-chip active" data-dtype="ALL">Tất cả loại</button>
           <button class="sib-chip" data-dtype="LH">Lưu hành (LH)</button>
           <button class="sib-chip" data-dtype="HQ">Hợp quy (HQ)</button>
           <button class="sib-chip" data-dtype="COA">Phân tích (COA)</button>
@@ -168,6 +173,10 @@
             </button>
           </div>
         </div>
+
+        <!-- Hộp cảnh báo trùng Tệp PDF hoặc trùng Mã số phân bón -->
+        <div id="add-dup-file-warning" class="form-group full dup-warning-box hidden"></div>
+        <div id="add-dup-mslh-warning" class="form-group full dup-warning-box hidden"></div>
 
         <div class="form-group">
           <label>Loại hồ sơ</label>

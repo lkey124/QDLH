@@ -1,7 +1,7 @@
 {
-  "version": "1.2.3",
-  "build_num": 5,
-  "updated_at": "19/11/2026 09:01",
+  "version": "1.2.4",
+  "build_num": 6,
+  "updated_at": "19/11/2026 09:53",
   "repo": "lkey124/QDLH",
-  "note": "Bỏ nút Mở Thư Mục / Copy Trọn Bộ / Copy Nhãn Phụ và thêm Kho xem trực tiếp toàn bộ Tệp PDF trong App"
+  "note": "Phân loại Tệp có sẵn vs Tệp mới thêm, cảnh báo Trùng tệp PDF / Trùng mã số phân bón và sửa hiển thị trang PDF offline"
 }

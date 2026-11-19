@@ -36,9 +36,11 @@ let SEARCH_RAF_ID = null;
 
 let ADD_UPLOADED_PDF_PATH = "";
 let ADD_UPLOADED_MD5 = "";
+let ADD_LAST_RAW_FILE = null;
 
 let PDF_STATE = {
   path: "",
+  md5: "",
   page: 1,
   totalPages: 2,
   extraRot: 0,
@@ -139,11 +141,7 @@ async function loadAllData() {
   APP_DATA = await res.json();
 
   buildFastIndexes();
-
-  const pdfCountEl = document.getElementById("badge-pdf-count");
-  if (pdfCountEl && APP_DATA.pdf_files) {
-    pdfCountEl.textContent = APP_DATA.pdf_files.length;
-  }
+  updatePdfLibraryCounts();
 
   if (APP_DATA.version_info && APP_DATA.version_info.version) {
     const vBadge = document.getElementById("app-version-badge");
@@ -477,7 +475,7 @@ function renderProductDetail(p) {
             <div class="cbox" style="background:#fffbeb;border-color:#fde68a;" data-copy="${escapeHtml(rd.chi_tieu_chat_luong || rd.tom_tat)}" data-label="Hồ sơ ${escapeHtml(rd.doc_type)}">
               <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
                 <div class="cbox-lbl" style="color:#b45309;">📎 Hồ sơ ${escapeHtml(rd.doc_type)} đi kèm — Số hiệu: ${escapeHtml(rd.so_hieu)} (${escapeHtml(rd.ngay_cap)})</div>
-                ${rd.pdf_path ? `<button class="sib-chip" style="background:#fef3c7;border-color:#f59e0b;color:#92400e;font-weight:700;" data-view-pdf="${escapeHtml(rd.pdf_path)}" data-view-page="1">👁️ Xem PDF này trong App</button>` : ""}
+                ${rd.pdf_path ? `<button class="sib-chip" style="background:#fef3c7;border-color:#f59e0b;color:#92400e;font-weight:700;" data-view-pdf="${escapeHtml(rd.pdf_path)}" data-view-page="1" data-view-total="${rd.pdf_page_count || 1}" data-view-md5="${escapeHtml(rd.pdf_md5 || "")}">👁️ Xem PDF này trong App</button>` : ""}
               </div>
               <div class="cbox-val" style="font-size:13px;">${escapeHtml(rd.tom_tat)}</div>
               ${rd.chi_tieu_chat_luong ? `<div class="cbox-sub"><b>Chỉ tiêu:</b> ${escapeHtml(rd.chi_tieu_chat_luong)}</div>` : ""}
@@ -495,8 +493,8 @@ function renderProductDetail(p) {
           <div class="siblings-bar" style="margin-top:10px;">
             <span style="font-size:11.5px;font-weight:700;color:#0f766e;">📚 Tệp PDF của mã này trong App (Bấm để xem ngay):</span>
             ${prodPdfs.map((f) => `
-              <button class="sib-chip" data-view-pdf="${escapeHtml(f.full_path)}" data-view-page="${f.doc_type === "LH" ? (p.page_num || 2) : 1}" data-view-total="${f.page_count || 1}">
-                📄 <b>[${escapeHtml(f.doc_type)}]</b> ${escapeHtml(f.file_name)} (${f.page_count || 1} trang)
+              <button class="sib-chip" data-view-pdf="${escapeHtml(f.full_path)}" data-view-page="${f.doc_type === "LH" ? (p.page_num || 2) : 1}" data-view-total="${f.page_count || 1}" data-view-md5="${escapeHtml((f.md5_hash || "").slice(0, 8))}">
+                📄 <b>[${escapeHtml(f.doc_type)}]</b> ${escapeHtml(f.file_name)} (${f.page_count || 1} trang) ${f.is_user_added ? `<span class="pdf-src-badge user">🆕 Mới thêm</span>` : `<span class="pdf-src-badge builtin">📦 Có sẵn</span>`}
               </button>
             `).join("")}
           </div>
@@ -506,6 +504,7 @@ function renderProductDetail(p) {
   `;
 
   PDF_STATE.path = p.pdf_path;
+  PDF_STATE.md5 = p.pdf_md5 || "";
   PDF_STATE.sttPage = p.page_num || 2;
   PDF_STATE.page = p.page_num || 2;
   PDF_STATE.totalPages = p.pdf_page_count || 2;
@@ -514,7 +513,7 @@ function renderProductDetail(p) {
   if (IS_PDF_OPEN) {
     if (PDF_DEBOUNCE_TIMER) clearTimeout(PDF_DEBOUNCE_TIMER);
     PDF_DEBOUNCE_TIMER = setTimeout(() => {
-      loadPdfIntoViewer(p.pdf_path, p.page_num || 2, p.page_num || 2, p.pdf_page_count || 2);
+      loadPdfIntoViewer(p.pdf_path, p.page_num || 2, p.page_num || 2, p.pdf_page_count || 2, p.pdf_md5 || "");
     }, 35);
   }
 }
@@ -533,7 +532,8 @@ function togglePdfDrawer(open) {
       SELECTED_PRODUCT.pdf_path,
       SELECTED_PRODUCT.page_num || 2,
       SELECTED_PRODUCT.page_num || 2,
-      SELECTED_PRODUCT.pdf_page_count || 2
+      SELECTED_PRODUCT.pdf_page_count || 2,
+      SELECTED_PRODUCT.pdf_md5 || ""
     );
   }
 }
@@ -550,7 +550,16 @@ function setPdfZoom(newZoom) {
   }
 }
 
-function loadPdfIntoViewer(pdfPath, initialPage = 1, sttPage = 2, knownTotalPages = 2) {
+function findPdfMetaInAppData(pdfPath) {
+  if (!pdfPath || !APP_DATA.pdf_files) return null;
+  const low = pdfPath.toLowerCase();
+  const bname = low.split(/[\\/]/).pop();
+  return APP_DATA.pdf_files.find(
+    (f) => (f.full_path && f.full_path.toLowerCase() === low) || (f.file_name && f.file_name.toLowerCase() === bname)
+  ) || null;
+}
+
+function loadPdfIntoViewer(pdfPath, initialPage = 1, sttPage = 2, knownTotalPages = 2, md5Hint = "") {
   const banner = document.getElementById("pdf-file-banner");
   const img = document.getElementById("pdf-page-img");
   if (!pdfPath) {
@@ -559,8 +568,13 @@ function loadPdfIntoViewer(pdfPath, initialPage = 1, sttPage = 2, knownTotalPage
     return;
   }
 
+  const matchedFile = findPdfMetaInAppData(pdfPath);
+  const resolvedMd5 = md5Hint || (matchedFile && matchedFile.md5_hash ? matchedFile.md5_hash.slice(0, 8) : "");
+  const resolvedPages = knownTotalPages || (matchedFile && matchedFile.page_count ? matchedFile.page_count : 2);
+
   PDF_STATE.path = pdfPath;
-  PDF_STATE.totalPages = Math.max(1, knownTotalPages || 2);
+  PDF_STATE.md5 = resolvedMd5;
+  PDF_STATE.totalPages = Math.max(1, resolvedPages);
   PDF_STATE.page = Math.min(PDF_STATE.totalPages, Math.max(1, initialPage));
   PDF_STATE.sttPage = Math.min(PDF_STATE.totalPages, Math.max(1, sttPage || 2));
   PDF_STATE.extraRot = 0;
@@ -570,7 +584,7 @@ function loadPdfIntoViewer(pdfPath, initialPage = 1, sttPage = 2, knownTotalPage
 
   if (PDF_STATE.page !== 1) {
     const preImg = new Image();
-    preImg.src = `/api/pdf-page?path=${encodeURIComponent(pdfPath)}&page=1&rot=0&dpi=165`;
+    preImg.src = `/api/pdf-page?path=${encodeURIComponent(pdfPath)}&page=1&rot=0&dpi=165&md5=${encodeURIComponent(PDF_STATE.md5)}`;
   }
 }
 
@@ -587,16 +601,21 @@ function renderCurrentPdfPage() {
   img.style.width = `${PDF_STATE.zoom}%`;
 
   if (img.classList.contains("hidden")) {
+    loading.textContent = "Đang tải & xoay thẳng trang PDF...";
     loading.classList.remove("hidden");
   } else {
     img.style.opacity = "0.55";
   }
 
-  const url = `/api/pdf-page?path=${encodeURIComponent(PDF_STATE.path)}&page=${PDF_STATE.page}&rot=${PDF_STATE.extraRot}&dpi=165`;
+  const url = `/api/pdf-page?path=${encodeURIComponent(PDF_STATE.path)}&page=${PDF_STATE.page}&rot=${PDF_STATE.extraRot}&dpi=165&md5=${encodeURIComponent(PDF_STATE.md5 || "")}`;
   img.onload = () => {
     loading.classList.add("hidden");
     img.classList.remove("hidden");
     img.style.opacity = "1";
+  };
+  img.onerror = () => {
+    loading.textContent = "⚠️ Không thể hiển thị trang PDF này (Vui lòng khởi động lại App để nạp bộ giải mã mới nhất).";
+    loading.classList.remove("hidden");
   };
   img.src = url;
 }
@@ -869,8 +888,19 @@ function openEditModal(p) {
 function openAddModal() {
   ADD_UPLOADED_PDF_PATH = "";
   ADD_UPLOADED_MD5 = "";
+  ADD_LAST_RAW_FILE = null;
   document.getElementById("add-pdf-file-input").value = "";
   document.getElementById("add-pdf-status").innerHTML = "Tệp PDF sẽ được tự động sao chép vào bộ nhớ phần mềm và xoay thẳng trang phụ lục.";
+  const dupFileBox = document.getElementById("add-dup-file-warning");
+  const dupMslhBox = document.getElementById("add-dup-mslh-warning");
+  if (dupFileBox) {
+    dupFileBox.classList.add("hidden");
+    dupFileBox.innerHTML = "";
+  }
+  if (dupMslhBox) {
+    dupMslhBox.classList.add("hidden");
+    dupMslhBox.innerHTML = "";
+  }
   document.getElementById("add-doc-type").value = "LH";
   document.getElementById("add-mslh").value = "";
   document.getElementById("add-ten").value = "";
@@ -892,6 +922,44 @@ function openAddModal() {
   document.getElementById("add-ghi-chu-sn").value = "";
 
   document.getElementById("add-modal").classList.remove("hidden");
+}
+
+function checkDuplicateMslhInAddModal() {
+  const dupMslhBox = document.getElementById("add-dup-mslh-warning");
+  if (!dupMslhBox) return null;
+  const val = (document.getElementById("add-mslh")?.value || "").trim();
+  if (!val) {
+    dupMslhBox.classList.add("hidden");
+    dupMslhBox.innerHTML = "";
+    return null;
+  }
+  const existingProds = (APP_DATA.products || []).filter((p) => p.mslh === val);
+  if (existingProds.length === 0) {
+    dupMslhBox.classList.add("hidden");
+    dupMslhBox.innerHTML = "";
+    return null;
+  }
+  const p = existingProds[0];
+  dupMslhBox.classList.remove("hidden");
+  dupMslhBox.classList.add("error");
+  dupMslhBox.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:800;font-size:13px;color:#b91c1c;">
+          ⚠️ CẢNH BÁO TRÙNG MÃ SỐ PHÂN BÓN (${escapeHtml(p.mslh)})!
+        </div>
+        <div style="margin-top:2px;">
+          Mã số <b>${escapeHtml(p.mslh)}</b> đã có trong App: <b>${escapeHtml(p.ten_phan_bon)}</b>
+          • Quyết định: <b>${escapeHtml(p.so_qd_full)}</b> (STT ${p.stt})
+          • Đơn vị: <b>${escapeHtml(p.don_vi_dang_ky)}</b>
+        </div>
+      </div>
+      <button type="button" class="btn-action secondary" data-jump-existing-prod="${p.id}" style="height:28px;font-size:12px;border-color:#dc2626;color:#b91c1c;">
+        👁️ Xem mã ${escapeHtml(p.mslh)} đã có
+      </button>
+    </div>
+  `;
+  return p;
 }
 
 function fillDecisionFieldsIfMatched(dec) {
@@ -920,13 +988,39 @@ function switchTab(tabName) {
   });
 }
 
-// ==================== KHO TỆP PDF CÓ TRONG APP ====================
+// ==================== KHO TỆP PDF CÓ TRONG APP (PHÂN LOẠI TỆP CÓ SẴN vs TỆP MỚI THÊM) ====================
 let CURRENT_PDF_LIB_TYPE = "ALL";
+let CURRENT_PDF_LIB_SOURCE = "ALL"; // ALL | BUILTIN | USER
+
+function isUserAddedPdf(f) {
+  if (!f) return false;
+  if (typeof f.is_user_added === "boolean") return f.is_user_added;
+  return (f.full_path && f.full_path.toLowerCase().includes("user_pdfs")) || (f.id && f.id > 97);
+}
+
+function updatePdfLibraryCounts() {
+  const allFiles = APP_DATA.pdf_files || [];
+  const userFiles = allFiles.filter((f) => isUserAddedPdf(f));
+  const builtinFiles = allFiles.filter((f) => !isUserAddedPdf(f));
+
+  const tabAll = document.getElementById("tab-pdf-src-all");
+  const tabBuiltin = document.getElementById("tab-pdf-src-builtin");
+  const tabUser = document.getElementById("tab-pdf-src-user");
+  if (tabAll) tabAll.textContent = `📚 Tất cả tệp (${allFiles.length})`;
+  if (tabBuiltin) tabBuiltin.textContent = `📦 Tệp có sẵn trong App (${builtinFiles.length})`;
+  if (tabUser) tabUser.textContent = `🆕 Tệp mới thêm (${userFiles.length})`;
+
+  const pdfCountEl = document.getElementById("badge-pdf-count");
+  if (pdfCountEl) {
+    pdfCountEl.textContent = userFiles.length > 0 ? `${builtinFiles.length} + ${userFiles.length} mới` : `${allFiles.length}`;
+  }
+}
 
 function openPdfLibraryModal() {
   const modal = document.getElementById("pdf-lib-modal");
   if (!modal) return;
   modal.classList.remove("hidden");
+  updatePdfLibraryCounts();
   const inp = document.getElementById("pdf-lib-search");
   if (inp) {
     inp.value = "";
@@ -935,13 +1029,55 @@ function openPdfLibraryModal() {
   renderPdfLibraryList();
 }
 
+function renderSinglePdfLibItem(f) {
+  const isUser = isUserAddedPdf(f);
+  const isDup = Boolean(f.is_duplicate);
+  const md5Short = (f.md5_hash || "").slice(0, 8);
+  return `
+    <div class="pdf-lib-item ${isUser ? "user-added" : ""} ${isDup ? "is-dup" : ""}" data-pdf-id="${f.id}" data-full-path="${escapeHtml(f.full_path)}" data-mslh="${escapeHtml(f.mslh || "")}" data-qd="${escapeHtml(f.qd_key || "")}" data-dtype="${escapeHtml(f.doc_type || "LH")}" data-pages="${f.page_count || 1}" data-md5="${escapeHtml(md5Short)}">
+      <div class="pdf-lib-info">
+        <span class="pdf-dtype-badge ${escapeHtml(f.doc_type || "LH")}">${escapeHtml(f.doc_type || "LH")}</span>
+        <div style="min-width:0;flex:1;">
+          <div class="pdf-lib-title" title="${escapeHtml(f.file_name)}">
+            ${escapeHtml(f.file_name)}
+            ${isUser
+              ? `<span class="pdf-src-badge user">🆕 Tệp mới thêm</span>`
+              : `<span class="pdf-src-badge builtin">📦 Tệp có sẵn</span>`
+            }
+            ${isDup
+              ? `<span class="pdf-src-badge dup" title="${escapeHtml(f.duplicate_note || "Tệp này trùng với tệp có sẵn trong App")}">⚠️ Trùng tệp có sẵn</span>`
+              : ""
+            }
+          </div>
+          <div style="font-size:11.5px;color:#64748b;margin-top:2px;">
+            ${f.mslh ? `Mã PB: <b style="color:var(--brand);font-family:var(--font-mono);">${escapeHtml(f.mslh)}</b> • ` : ""}
+            ${f.qd_key ? `Quyết định: <b>QĐ ${escapeHtml(f.qd_key)}</b> • ` : ""}
+            ${f.stt ? `STT ${f.stt} • ` : ""}
+            Số trang: <b>${f.page_count || 1} trang</b>
+            ${isDup && f.duplicate_note ? ` • <span style="color:#b45309;font-weight:700;">${escapeHtml(f.duplicate_note)}</span>` : ""}
+          </div>
+        </div>
+      </div>
+      <div class="pdf-lib-right">
+        ${isUser ? `<button class="btn-action danger" data-delete-pdf-id="${f.id}" data-delete-pdf-name="${escapeHtml(f.file_name)}" style="height:30px;font-size:11.5px;padding:0 10px;" title="Xóa tệp mới thêm này khỏi máy">🗑️ Xóa tệp</button>` : ""}
+        <button class="btn-action amber" style="height:30px;font-size:12px;">👁️ Xem PDF trong App</button>
+      </div>
+    </div>
+  `;
+}
+
 function renderPdfLibraryList() {
   const listEl = document.getElementById("pdf-lib-list");
   if (!listEl) return;
+  updatePdfLibraryCounts();
+
   const qNorm = removeAccents((document.getElementById("pdf-lib-search")?.value || "").trim());
   const allFiles = APP_DATA.pdf_files || [];
 
   const filtered = allFiles.filter((f) => {
+    const isUser = isUserAddedPdf(f);
+    if (CURRENT_PDF_LIB_SOURCE === "BUILTIN" && isUser) return false;
+    if (CURRENT_PDF_LIB_SOURCE === "USER" && !isUser) return false;
     if (CURRENT_PDF_LIB_TYPE !== "ALL" && f.doc_type !== CURRENT_PDF_LIB_TYPE) return false;
     if (!qNorm) return true;
     const hay = removeAccents(`${f.file_name} ${f.mslh || ""} ${f.qd_key || ""} ${f.doc_type || ""}`);
@@ -949,29 +1085,38 @@ function renderPdfLibraryList() {
   });
 
   if (filtered.length === 0) {
-    listEl.innerHTML = `<div style="padding:24px;text-align:center;color:#64748b;">Không tìm thấy tệp PDF phù hợp.</div>`;
+    const emptyMsg = CURRENT_PDF_LIB_SOURCE === "USER"
+      ? "Chưa có tệp PDF mới thêm nào phù hợp. Bạn có thể bấm nút '➕ Thêm Tệp / Mã' trên thanh công cụ để thêm tệp mới."
+      : "Không tìm thấy tệp PDF phù hợp.";
+    listEl.innerHTML = `<div style="padding:28px;text-align:center;color:#64748b;font-size:13.5px;">${emptyMsg}</div>`;
     return;
   }
 
-  listEl.innerHTML = filtered.map((f, idx) => `
-    <div class="pdf-lib-item" data-pdf-idx="${idx}" data-full-path="${escapeHtml(f.full_path)}" data-mslh="${escapeHtml(f.mslh || "")}" data-qd="${escapeHtml(f.qd_key || "")}" data-dtype="${escapeHtml(f.doc_type || "LH")}" data-pages="${f.page_count || 1}">
-      <div class="pdf-lib-info">
-        <span class="pdf-dtype-badge ${escapeHtml(f.doc_type || "LH")}">${escapeHtml(f.doc_type || "LH")}</span>
-        <div style="min-width:0;flex:1;">
-          <div class="pdf-lib-title" title="${escapeHtml(f.file_name)}">${escapeHtml(f.file_name)}</div>
-          <div style="font-size:11.5px;color:#64748b;">
-            ${f.mslh ? `Mã PB: <b style="color:var(--brand);font-family:var(--font-mono);">${escapeHtml(f.mslh)}</b> • ` : ""}
-            ${f.qd_key ? `Quyết định: <b>QĐ ${escapeHtml(f.qd_key)}</b> • ` : ""}
-            ${f.stt ? `STT ${f.stt} • ` : ""}
-            Số trang: <b>${f.page_count || 1} trang</b>
-          </div>
-        </div>
+  const userGroup = filtered.filter((f) => isUserAddedPdf(f));
+  const builtinGroup = filtered.filter((f) => !isUserAddedPdf(f));
+
+  let htmlParts = [];
+  if (userGroup.length > 0) {
+    htmlParts.push(`
+      <div class="pdf-lib-section-hdr user">
+        <span>🆕 TỆP MỚI THÊM VÀO MÁY (${userGroup.length} tệp)</span>
+        <span style="font-size:11.5px;font-weight:600;">Lưu riêng trong máy • Không bị mất khi cập nhật App</span>
       </div>
-      <div class="pdf-lib-right">
-        <button class="btn-action amber" style="height:30px;font-size:12px;">👁️ Xem PDF trong App</button>
+    `);
+    htmlParts.push(userGroup.map(renderSinglePdfLibItem).join(""));
+  }
+
+  if (builtinGroup.length > 0) {
+    htmlParts.push(`
+      <div class="pdf-lib-section-hdr builtin">
+        <span>📦 TỆP CÓ SẴN TRONG APP (${builtinGroup.length} tệp gốc)</span>
+        <span style="font-size:11.5px;font-weight:600;">Đã tích hợp sẵn trang xem Offline 100%</span>
       </div>
-    </div>
-  `).join("");
+    `);
+    htmlParts.push(builtinGroup.map(renderSinglePdfLibItem).join(""));
+  }
+
+  listEl.innerHTML = htmlParts.join("");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -1004,6 +1149,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const pdfPath = viewPdfBtn.getAttribute("data-view-pdf");
       const initPage = parseInt(viewPdfBtn.getAttribute("data-view-page") || "1", 10);
       const totalP = parseInt(viewPdfBtn.getAttribute("data-view-total") || "2", 10);
+      const md5Hint = viewPdfBtn.getAttribute("data-view-md5") || "";
       IS_PDF_OPEN = true;
       document.getElementById("pdf-viewer-panel").classList.remove("hidden");
       const toggleBtn = document.getElementById("btn-toggle-pdf");
@@ -1011,7 +1157,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         toggleBtn.classList.add("active");
         toggleBtn.innerHTML = "📄 Đóng PDF";
       }
-      loadPdfIntoViewer(pdfPath, initPage, initPage, totalP);
+      if (PDF_DEBOUNCE_TIMER) clearTimeout(PDF_DEBOUNCE_TIMER);
+      loadPdfIntoViewer(pdfPath, initPage, initPage, totalP, md5Hint);
       return;
     }
 
@@ -1059,14 +1206,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById("add-pdf-file-input").click();
   });
 
-  document.getElementById("add-pdf-file-input").addEventListener("change", async (e) => {
-    const file = e.target.files && e.target.files[0];
+  async function uploadPdfFileToAddModal(file, force = false) {
     if (!file) return;
+    ADD_LAST_RAW_FILE = file;
     const statusEl = document.getElementById("add-pdf-status");
-    statusEl.innerHTML = `⏳ Đang nạp và xoay thẳng tệp <b>${escapeHtml(file.name)}</b>...`;
+    const dupFileBox = document.getElementById("add-dup-file-warning");
+    statusEl.innerHTML = `⏳ Đang kiểm tra trùng lặp và xoay thẳng tệp <b>${escapeHtml(file.name)}</b>...`;
     try {
       const buf = await file.arrayBuffer();
-      const res = await fetch(`/api/upload-pdf?name=${encodeURIComponent(file.name)}`, {
+      const res = await fetch(`/api/upload-pdf?name=${encodeURIComponent(file.name)}&force=${force ? "1" : "0"}`, {
         method: "POST",
         headers: { "Content-Type": "application/pdf" },
         body: buf
@@ -1078,7 +1226,47 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       ADD_UPLOADED_PDF_PATH = data.saved_path;
       ADD_UPLOADED_MD5 = data.md5_hash || "";
-      statusEl.innerHTML = `<span style="color:#047857;font-weight:700;">✅ Đã lưu vào máy: ${escapeHtml(data.file_name)} (${data.page_count} trang)</span>`;
+
+      if (data.is_duplicate_file && !force) {
+        const dupInfo = data.duplicate_file_info || {};
+        statusEl.innerHTML = `<span style="color:#b45309;font-weight:700;">⚠️ Tệp PDF này đã có trong App: ${escapeHtml(data.file_name)} (${data.page_count} trang)</span>`;
+        if (dupFileBox) {
+          dupFileBox.classList.remove("hidden");
+          dupFileBox.innerHTML = `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+              <div>
+                <div style="font-weight:800;font-size:13px;color:#b45309;">
+                  ⚠️ CẢNH BÁO TỆP PDF BỊ TRÙNG (${escapeHtml(data.duplicate_source || "Đã có trong App")})!
+                </div>
+                <div style="margin-top:2px;">
+                  Tệp <b>${escapeHtml(dupInfo.file_name || data.file_name)}</b> đã tồn tại sẵn trong App
+                  ${dupInfo.mslh ? `(Mã PB: <b>${escapeHtml(dupInfo.mslh)}</b>` : ""}
+                  ${dupInfo.qd_key ? ` • QĐ: <b>${escapeHtml(dupInfo.qd_key)}</b>)` : (dupInfo.mslh ? ")" : "")}.
+                  Hệ thống đã chặn tạo tệp trùng lặp và dùng lại tệp gốc đã có.
+                </div>
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button type="button" class="btn-action secondary" id="btn-force-save-dup-pdf" style="height:28px;font-size:12px;">
+                  📄 Vẫn lưu bản sao mới
+                </button>
+              </div>
+            </div>
+          `;
+          const btnForce = document.getElementById("btn-force-save-dup-pdf");
+          if (btnForce) {
+            btnForce.onclick = () => uploadPdfFileToAddModal(ADD_LAST_RAW_FILE, true);
+          }
+        }
+        showToast(`⚠️ Cảnh báo: Tệp PDF "${data.file_name}" đã có sẵn trong App!`, 3600);
+      } else {
+        if (dupFileBox) {
+          dupFileBox.classList.add("hidden");
+          dupFileBox.innerHTML = "";
+        }
+        statusEl.innerHTML = `<span style="color:#047857;font-weight:700;">✅ Đã lưu vào mục Tệp mới thêm: ${escapeHtml(data.file_name)} (${data.page_count} trang)</span>`;
+        await loadAllData();
+        showToast(`📄 Đã nạp tệp PDF mới (${data.page_count} trang) vào máy`);
+      }
 
       const meta = data.parsed_meta || {};
       if (meta.doc_type) document.getElementById("add-doc-type").value = meta.doc_type;
@@ -1092,9 +1280,36 @@ document.addEventListener("DOMContentLoaded", async () => {
       } else if (meta.qd_key && !document.getElementById("add-so-qd").value) {
         document.getElementById("add-so-qd").value = `${meta.qd_key}/QĐ-BVTV-PB`;
       }
-      showToast(`📄 Đã nạp tệp PDF (${data.page_count} trang) vào máy`);
+      const dupProd = checkDuplicateMslhInAddModal();
+      if (dupProd) {
+        showToast(`⚠️ Mã số phân bón ${dupProd.mslh} đã tồn tại trong App!`, 3500);
+      }
     } catch (err) {
       statusEl.innerHTML = `<span style="color:#dc2626;">❌ Không thể nạp tệp PDF: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+
+  document.getElementById("add-pdf-file-input").addEventListener("change", async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    await uploadPdfFileToAddModal(file, false);
+  });
+
+  // Kiểm tra trùng Mã số phân bón (MSLH) ngay khi người dùng gõ vào ô Mã số
+  document.getElementById("add-mslh").addEventListener("input", () => {
+    checkDuplicateMslhInAddModal();
+  });
+
+  // Cho phép bấm "Xem mã đã có" ngay từ hộp cảnh báo trùng mã số
+  document.getElementById("add-modal-body").addEventListener("click", (e) => {
+    const jumpBtn = e.target.closest("[data-jump-existing-prod]");
+    if (!jumpBtn) return;
+    const pid = parseInt(jumpBtn.getAttribute("data-jump-existing-prod"), 10);
+    const target = PRODUCTS_BY_ID.get(pid);
+    if (target) {
+      document.getElementById("add-modal").classList.add("hidden");
+      selectProduct(target);
+      showToast(`👁️ Đang xem mã ${target.mslh} đã có trong App`);
     }
   });
 
@@ -1119,6 +1334,24 @@ document.addEventListener("DOMContentLoaded", async () => {
       showToast("⚠️ Vui lòng nhập Mã số phân bón (MSLH) hoặc chọn tệp PDF!");
       document.getElementById("add-mslh").focus();
       return;
+    }
+
+    // Cảnh báo xác nhận nếu Mã số phân bón (MSLH) đã tồn tại trong App (khi thêm loại LH)
+    const existingProd = mslh ? (APP_DATA.products || []).find((p) => p.mslh === mslh) : null;
+    if (existingProd && docType === "LH") {
+      const okOverwrite = confirm(
+        `⚠️ CẢNH BÁO TRÙNG MÃ SỐ PHÂN BÓN (${mslh})!\n\n` +
+        `Mã số ${mslh} đã tồn tại trong App:\n` +
+        `• Tên phân bón: ${existingProd.ten_phan_bon}\n` +
+        `• Quyết định: ${existingProd.so_qd_full} (STT ${existingProd.stt})\n` +
+        `• Đơn vị: ${existingProd.don_vi_dang_ky}\n\n` +
+        `Bạn có muốn CẬP NHẬT / GHI ĐÈ thông tin mới lên mã ${mslh} này không?\n` +
+        `(Bấm Cancel / Hủy nếu bạn muốn đổi sang mã số khác)`
+      );
+      if (!okOverwrite) {
+        document.getElementById("add-mslh").focus();
+        return;
+      }
     }
 
     const res = await fetch("/api/add-record", {
@@ -1423,6 +1656,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   if (pdfLibSearch) {
     pdfLibSearch.addEventListener("input", renderPdfLibraryList);
   }
+  const pdfLibSourceTabs = document.getElementById("pdf-lib-source-tabs");
+  if (pdfLibSourceTabs) {
+    pdfLibSourceTabs.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-src]");
+      if (!btn) return;
+      CURRENT_PDF_LIB_SOURCE = btn.getAttribute("data-src");
+      pdfLibSourceTabs.querySelectorAll(".pdf-src-tab").forEach((b) => b.classList.toggle("active", b === btn));
+      renderPdfLibraryList();
+    });
+  }
   const pdfLibFilters = document.getElementById("pdf-lib-type-filters");
   if (pdfLibFilters) {
     pdfLibFilters.addEventListener("click", (e) => {
@@ -1435,7 +1678,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   const pdfLibList = document.getElementById("pdf-lib-list");
   if (pdfLibList) {
-    pdfLibList.addEventListener("click", (e) => {
+    pdfLibList.addEventListener("click", async (e) => {
+      const delBtn = e.target.closest("[data-delete-pdf-id]");
+      if (delBtn) {
+        e.stopPropagation();
+        const fid = parseInt(delBtn.getAttribute("data-delete-pdf-id"), 10);
+        const fname = delBtn.getAttribute("data-delete-pdf-name") || "tệp PDF này";
+        if (!confirm(`Bạn có chắc muốn xóa tệp mới thêm "${fname}" khỏi máy không?`)) return;
+        await fetch("/api/delete-pdf-file", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: fid })
+        });
+        showToast(`🗑️ Đã xóa tệp "${fname}"`);
+        await loadAllData();
+        renderPdfLibraryList();
+        return;
+      }
+
       const item = e.target.closest(".pdf-lib-item");
       if (!item) return;
       const fullPath = item.getAttribute("data-full-path");
@@ -1443,6 +1703,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const qdKey = item.getAttribute("data-qd");
       const dtype = item.getAttribute("data-dtype");
       const pages = parseInt(item.getAttribute("data-pages") || "1", 10);
+      const md5Hint = item.getAttribute("data-md5") || "";
 
       document.getElementById("pdf-lib-modal").classList.add("hidden");
 
@@ -1459,6 +1720,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         renderProductDetail(targetProd);
       }
 
+      // Hủy hẹn giờ của renderProductDetail để không bị ghi đè bởi file mặc định của mã SP
+      if (PDF_DEBOUNCE_TIMER) clearTimeout(PDF_DEBOUNCE_TIMER);
+
       // Mở khung xem PDF bên phải và nạp đúng tệp PDF vừa chọn
       IS_PDF_OPEN = true;
       document.getElementById("pdf-viewer-panel").classList.remove("hidden");
@@ -1468,7 +1732,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         toggleBtn.innerHTML = "📄 Đóng PDF";
       }
       const startPage = dtype === "LH" ? ((targetProd && targetProd.page_num) ? targetProd.page_num : Math.min(2, pages)) : 1;
-      loadPdfIntoViewer(fullPath, startPage, startPage, pages);
+      loadPdfIntoViewer(fullPath, startPage, startPage, pages, md5Hint);
     });
   }
 
