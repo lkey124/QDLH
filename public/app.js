@@ -140,6 +140,11 @@ async function loadAllData() {
 
   buildFastIndexes();
 
+  const pdfCountEl = document.getElementById("badge-pdf-count");
+  if (pdfCountEl && APP_DATA.pdf_files) {
+    pdfCountEl.textContent = APP_DATA.pdf_files.length;
+  }
+
   if (APP_DATA.version_info && APP_DATA.version_info.version) {
     const vBadge = document.getElementById("app-version-badge");
     if (vBadge) vBadge.textContent = `v${APP_DATA.version_info.version}`;
@@ -343,17 +348,8 @@ function renderProductDetail(p) {
       </div>
 
       <div class="prod-actions">
-        <button class="btn-action primary" data-action="copy-all">
-          📋 Copy Trọn Bộ
-        </button>
-        <button class="btn-action secondary" data-action="copy-label">
-          🏷️ Copy Nhãn Phụ
-        </button>
         <button class="btn-action amber ${IS_PDF_OPEN ? "active" : ""}" id="btn-toggle-pdf" data-action="toggle-pdf">
           📄 ${IS_PDF_OPEN ? "Đóng PDF" : "Xem PDF Gốc"}
-        </button>
-        <button class="btn-action secondary" data-action="reveal-disk" title="Mở thư mục chứa tệp PDF này">
-          📂 Mở Thư Mục
         </button>
         <button class="btn-action secondary" data-action="edit-record">
           ✏️ Sửa
@@ -479,13 +475,33 @@ function renderProductDetail(p) {
         <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
           ${p.related_docs.map((rd) => `
             <div class="cbox" style="background:#fffbeb;border-color:#fde68a;" data-copy="${escapeHtml(rd.chi_tieu_chat_luong || rd.tom_tat)}" data-label="Hồ sơ ${escapeHtml(rd.doc_type)}">
-              <div class="cbox-lbl" style="color:#b45309;">📎 Hồ sơ ${escapeHtml(rd.doc_type)} đi kèm — Số hiệu: ${escapeHtml(rd.so_hieu)} (${escapeHtml(rd.ngay_cap)})</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+                <div class="cbox-lbl" style="color:#b45309;">📎 Hồ sơ ${escapeHtml(rd.doc_type)} đi kèm — Số hiệu: ${escapeHtml(rd.so_hieu)} (${escapeHtml(rd.ngay_cap)})</div>
+                ${rd.pdf_path ? `<button class="sib-chip" style="background:#fef3c7;border-color:#f59e0b;color:#92400e;font-weight:700;" data-view-pdf="${escapeHtml(rd.pdf_path)}" data-view-page="1">👁️ Xem PDF này trong App</button>` : ""}
+              </div>
               <div class="cbox-val" style="font-size:13px;">${escapeHtml(rd.tom_tat)}</div>
               ${rd.chi_tieu_chat_luong ? `<div class="cbox-sub"><b>Chỉ tiêu:</b> ${escapeHtml(rd.chi_tieu_chat_luong)}</div>` : ""}
             </div>
           `).join("")}
         </div>
       ` : ""}
+
+      ${(() => {
+        const prodPdfs = (APP_DATA.pdf_files || []).filter(
+          (f) => (f.mslh && f.mslh === p.mslh) || (!f.mslh && f.qd_key && f.qd_key === p.qd_key)
+        );
+        if (prodPdfs.length === 0) return "";
+        return `
+          <div class="siblings-bar" style="margin-top:10px;">
+            <span style="font-size:11.5px;font-weight:700;color:#0f766e;">📚 Tệp PDF của mã này trong App (Bấm để xem ngay):</span>
+            ${prodPdfs.map((f) => `
+              <button class="sib-chip" data-view-pdf="${escapeHtml(f.full_path)}" data-view-page="${f.doc_type === "LH" ? (p.page_num || 2) : 1}" data-view-total="${f.page_count || 1}">
+                📄 <b>[${escapeHtml(f.doc_type)}]</b> ${escapeHtml(f.file_name)} (${f.page_count || 1} trang)
+              </button>
+            `).join("")}
+          </div>
+        `;
+      })()}
     </div>
   `;
 
@@ -904,6 +920,60 @@ function switchTab(tabName) {
   });
 }
 
+// ==================== KHO TỆP PDF CÓ TRONG APP ====================
+let CURRENT_PDF_LIB_TYPE = "ALL";
+
+function openPdfLibraryModal() {
+  const modal = document.getElementById("pdf-lib-modal");
+  if (!modal) return;
+  modal.classList.remove("hidden");
+  const inp = document.getElementById("pdf-lib-search");
+  if (inp) {
+    inp.value = "";
+    inp.focus();
+  }
+  renderPdfLibraryList();
+}
+
+function renderPdfLibraryList() {
+  const listEl = document.getElementById("pdf-lib-list");
+  if (!listEl) return;
+  const qNorm = removeAccents((document.getElementById("pdf-lib-search")?.value || "").trim());
+  const allFiles = APP_DATA.pdf_files || [];
+
+  const filtered = allFiles.filter((f) => {
+    if (CURRENT_PDF_LIB_TYPE !== "ALL" && f.doc_type !== CURRENT_PDF_LIB_TYPE) return false;
+    if (!qNorm) return true;
+    const hay = removeAccents(`${f.file_name} ${f.mslh || ""} ${f.qd_key || ""} ${f.doc_type || ""}`);
+    return hay.includes(qNorm);
+  });
+
+  if (filtered.length === 0) {
+    listEl.innerHTML = `<div style="padding:24px;text-align:center;color:#64748b;">Không tìm thấy tệp PDF phù hợp.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = filtered.map((f, idx) => `
+    <div class="pdf-lib-item" data-pdf-idx="${idx}" data-full-path="${escapeHtml(f.full_path)}" data-mslh="${escapeHtml(f.mslh || "")}" data-qd="${escapeHtml(f.qd_key || "")}" data-dtype="${escapeHtml(f.doc_type || "LH")}" data-pages="${f.page_count || 1}">
+      <div class="pdf-lib-info">
+        <span class="pdf-dtype-badge ${escapeHtml(f.doc_type || "LH")}">${escapeHtml(f.doc_type || "LH")}</span>
+        <div style="min-width:0;flex:1;">
+          <div class="pdf-lib-title" title="${escapeHtml(f.file_name)}">${escapeHtml(f.file_name)}</div>
+          <div style="font-size:11.5px;color:#64748b;">
+            ${f.mslh ? `Mã PB: <b style="color:var(--brand);font-family:var(--font-mono);">${escapeHtml(f.mslh)}</b> • ` : ""}
+            ${f.qd_key ? `Quyết định: <b>QĐ ${escapeHtml(f.qd_key)}</b> • ` : ""}
+            ${f.stt ? `STT ${f.stt} • ` : ""}
+            Số trang: <b>${f.page_count || 1} trang</b>
+          </div>
+        </div>
+      </div>
+      <div class="pdf-lib-right">
+        <button class="btn-action amber" style="height:30px;font-size:12px;">👁️ Xem PDF trong App</button>
+      </div>
+    </div>
+  `).join("");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   await loadAllData();
   setTimeout(() => checkRemoteUpdate(true), 1200);
@@ -928,6 +998,23 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // 2. Ủy quyền sự kiện cho Khung Chi tiết (#product-detail-content)
   document.getElementById("product-detail-content").addEventListener("click", (e) => {
+    const viewPdfBtn = e.target.closest("[data-view-pdf]");
+    if (viewPdfBtn) {
+      e.stopPropagation();
+      const pdfPath = viewPdfBtn.getAttribute("data-view-pdf");
+      const initPage = parseInt(viewPdfBtn.getAttribute("data-view-page") || "1", 10);
+      const totalP = parseInt(viewPdfBtn.getAttribute("data-view-total") || "2", 10);
+      IS_PDF_OPEN = true;
+      document.getElementById("pdf-viewer-panel").classList.remove("hidden");
+      const toggleBtn = document.getElementById("btn-toggle-pdf");
+      if (toggleBtn) {
+        toggleBtn.classList.add("active");
+        toggleBtn.innerHTML = "📄 Đóng PDF";
+      }
+      loadPdfIntoViewer(pdfPath, initPage, initPage, totalP);
+      return;
+    }
+
     const copyEl = e.target.closest("[data-copy]");
     if (copyEl) {
       e.stopPropagation();
@@ -1315,11 +1402,75 @@ document.addEventListener("DOMContentLoaded", async () => {
     renderCurrentPdfPage();
   });
   document.getElementById("btn-open-external-pdf").addEventListener("click", () => {
-    if (PDF_STATE.path) openFileOnDisk(PDF_STATE.path, "open");
+    openPdfLibraryModal();
   });
   document.getElementById("btn-close-pdf").addEventListener("click", () => {
     togglePdfDrawer(false);
   });
+
+  // Sự kiện cho Modal Kho Tệp PDF trong App (#pdf-lib-modal)
+  const btnPdfLib = document.getElementById("btn-pdf-library");
+  if (btnPdfLib) {
+    btnPdfLib.addEventListener("click", openPdfLibraryModal);
+  }
+  const btnClosePdfLib = document.getElementById("btn-close-pdf-lib");
+  if (btnClosePdfLib) {
+    btnClosePdfLib.addEventListener("click", () => {
+      document.getElementById("pdf-lib-modal").classList.add("hidden");
+    });
+  }
+  const pdfLibSearch = document.getElementById("pdf-lib-search");
+  if (pdfLibSearch) {
+    pdfLibSearch.addEventListener("input", renderPdfLibraryList);
+  }
+  const pdfLibFilters = document.getElementById("pdf-lib-type-filters");
+  if (pdfLibFilters) {
+    pdfLibFilters.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-dtype]");
+      if (!btn) return;
+      CURRENT_PDF_LIB_TYPE = btn.getAttribute("data-dtype");
+      pdfLibFilters.querySelectorAll(".sib-chip").forEach((b) => b.classList.toggle("active", b === btn));
+      renderPdfLibraryList();
+    });
+  }
+  const pdfLibList = document.getElementById("pdf-lib-list");
+  if (pdfLibList) {
+    pdfLibList.addEventListener("click", (e) => {
+      const item = e.target.closest(".pdf-lib-item");
+      if (!item) return;
+      const fullPath = item.getAttribute("data-full-path");
+      const mslh = item.getAttribute("data-mslh");
+      const qdKey = item.getAttribute("data-qd");
+      const dtype = item.getAttribute("data-dtype");
+      const pages = parseInt(item.getAttribute("data-pages") || "1", 10);
+
+      document.getElementById("pdf-lib-modal").classList.add("hidden");
+
+      // Nếu tệp PDF gắn với một mã phân bón hoặc số QĐ, tự động hiển thị hồ sơ mã đó ở bên trái
+      let targetProd = null;
+      if (mslh) {
+        targetProd = APP_DATA.products.find((x) => x.mslh === mslh);
+      }
+      if (!targetProd && qdKey) {
+        targetProd = APP_DATA.products.find((x) => x.qd_key === qdKey);
+      }
+      if (targetProd) {
+        SELECTED_PRODUCT = targetProd;
+        renderProductDetail(targetProd);
+      }
+
+      // Mở khung xem PDF bên phải và nạp đúng tệp PDF vừa chọn
+      IS_PDF_OPEN = true;
+      document.getElementById("pdf-viewer-panel").classList.remove("hidden");
+      const toggleBtn = document.getElementById("btn-toggle-pdf");
+      if (toggleBtn) {
+        toggleBtn.classList.add("active");
+        toggleBtn.innerHTML = "📄 Đóng PDF";
+      }
+      const startPage = dtype === "LH" ? ((targetProd && targetProd.page_num) ? targetProd.page_num : Math.min(2, pages)) : 1;
+      loadPdfIntoViewer(fullPath, startPage, startPage, pages);
+    });
+  }
 
   document.getElementById("btn-close-modal").addEventListener("click", () => {
     document.getElementById("edit-modal").classList.add("hidden");

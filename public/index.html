@@ -31,8 +31,11 @@
       <div id="search-dropdown" class="search-dropdown hidden"></div>
     </div>
 
-    <!-- Cụm nút chức năng: Thêm Tệp/Mã mới + Cập nhật tính năng + Phát hành + Xuất Excel -->
+    <!-- Cụm nút chức năng: Kho PDF trong App + Thêm Tệp/Mã mới + Cập nhật tính năng + Phát hành -->
     <div class="header-actions">
+      <button id="btn-pdf-library" class="btn-header library" title="Xem danh sách toàn bộ tệp PDF có sẵn và đã thêm trong App">
+        📚 Tệp PDF (<span id="badge-pdf-count">97</span>)
+      </button>
       <button id="btn-add-new" class="btn-header add" title="Thêm tệp PDF mới hoặc Mã phân bón / Quyết định mới vào máy">
         ➕ Thêm Tệp / Mã
       </button>
@@ -80,7 +83,7 @@
         <div class="pdf-btn-group">
           <button id="btn-rot-left" class="pdf-sq-btn" title="Xoay trái 90°">↺</button>
           <button id="btn-rot-right" class="pdf-sq-btn" title="Xoay phải 90°">↻</button>
-          <button id="btn-open-external-pdf" class="pdf-pill-btn" title="Mở bằng phần mềm đọc PDF trên máy">🖨️ Mở rộng</button>
+          <button id="btn-open-external-pdf" class="pdf-pill-btn" title="Chọn xem tệp PDF khác có trong App">📚 Đổi tệp PDF</button>
           <button id="btn-close-pdf" class="pdf-close-btn" title="Đóng khung PDF">✕</button>
         </div>
       </div>
@@ -96,6 +99,33 @@
       </div>
     </aside>
   </main>
+
+  <!-- MODAL KHO TỆP PDF CÓ TRONG APP (XEM TRỰC TIẾP TRONG APP) -->
+  <div id="pdf-lib-modal" class="modal-backdrop hidden">
+    <div class="modal-box" style="max-width:960px;height:84vh;">
+      <div class="modal-header">
+        <h3>📚 Danh sách Tệp PDF có trong App (Bấm vào tệp bất kỳ để Xem &amp; Zoom ngay trong App)</h3>
+        <button id="btn-close-pdf-lib" class="close-btn">✕</button>
+      </div>
+      <div class="pdf-lib-toolbar">
+        <input
+          type="text"
+          id="pdf-lib-search"
+          placeholder="Tìm nhanh tệp PDF theo Mã số (VD: 09974, 31860...), số QĐ, tên sản phẩm hoặc công ty..."
+          autocomplete="off"
+        />
+        <div class="pdf-lib-filters" id="pdf-lib-type-filters">
+          <button class="sib-chip active" data-dtype="ALL">Tất cả</button>
+          <button class="sib-chip" data-dtype="LH">Lưu hành (LH)</button>
+          <button class="sib-chip" data-dtype="HQ">Hợp quy (HQ)</button>
+          <button class="sib-chip" data-dtype="COA">Phân tích (COA)</button>
+          <button class="sib-chip" data-dtype="UQ">Ủy quyền (GUQ/HĐUQ)</button>
+          <button class="sib-chip" data-dtype="KQPT">KQ Phân tích</button>
+        </div>
+      </div>
+      <div class="pdf-lib-list" id="pdf-lib-list"></div>
+    </div>
+  </div>
 
   <!-- MODAL CHỈNH SỬA HỒ SƠ ĐÃ CÓ -->
   <div id="edit-modal" class="modal-backdrop hidden">

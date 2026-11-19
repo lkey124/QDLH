@@ -442,12 +442,16 @@ def refresh_memory_cache():
         if fp:
             nk = _norm_path(fp)
             known_paths.add(nk)
-            meta_map[nk] = {
+            entry = {
                 "md5_prefix": (pf.get("md5_hash") or "")[:8],
                 "page_count": pf.get("page_count") or 1,
                 "file_size": pf.get("file_size") or 0,
                 "file_name": pf.get("file_name") or os.path.basename(fp)
             }
+            meta_map[nk] = entry
+            bname = os.path.basename(fp).lower()
+            if bname and bname not in meta_map:
+                meta_map[bname] = entry
 
     for d in decisions:
         dp = d.get("default_pdf_path") or ""
@@ -908,7 +912,7 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
             return self.send_json({"error": "Không tìm thấy tệp PDF"}, 404)
 
         nk = _norm_path(pdf_path)
-        cached = PDF_META_CACHE.get(nk)
+        cached = PDF_META_CACHE.get(nk) or PDF_META_CACHE.get(os.path.basename(pdf_path).lower())
         if cached and cached.get("page_count"):
             return self.send_json({
                 "path": pdf_path,
@@ -959,7 +963,7 @@ class QDLHRequestHandler(SimpleHTTPRequestHandler):
                 img_bytes = PDF_PAGE_CACHE[cache_key]
                 return self.send_raw_bytes(img_bytes, "image/jpeg", status=200, cache_control="max-age=86400")
 
-        meta = PDF_META_CACHE.get(nk, {})
+        meta = PDF_META_CACHE.get(nk) or PDF_META_CACHE.get(os.path.basename(pdf_path).lower(), {})
         md5_prefix = meta.get("md5_prefix", "")
         pre_jpg_path = os.path.join(PDF_PAGES_DIR, f"{md5_prefix}_p{page_num}.jpg") if md5_prefix else ""
 
